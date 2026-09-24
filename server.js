@@ -65,15 +65,29 @@ app.get('/api/classes', (req, res) => res.json(CLASSES));
 // number entry never touches our own server, which is how it should be) ----
 app.post('/api/checkout', async (req, res) => {
   try {
-    const { classId, name, email } = req.body || {};
+    const { classId, name, email, coupon } = req.body || {};
     const cls = CLASSES.find((c) => c.id === classId);
     if (!cls) return res.status(400).json({ error: 'Unknown class.' });
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Please enter your name.' });
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Please enter a valid email.' });
 
+    // ---- Optional coupon typed on our own site. We look it up against
+    // Stripe's real promotion codes and apply it directly if it's valid,
+    // so the discount is already in place before the customer even reaches
+    // Stripe's checkout page. ----
+    let discounts;
+    const trimmedCoupon = coupon && String(coupon).trim();
+    if (trimmedCoupon) {
+      const found = await stripe.promotionCodes.list({ code: trimmedCoupon, active: true, limit: 1 });
+      if (!found.data.length) {
+        return res.status(400).json({ error: 'That coupon code is not valid or has expired.' });
+      }
+      discounts = [{ promotion_code: found.data[0].id }];
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      automatic_payment_methods: { enabled: true },
+      automatic_payment_methods: { enabled: true }, // shows whatever you've turned on in Stripe (card, Apple Pay, Google Pay, bank debit, etc.) with no code changes needed
       line_items: [
         {
           price_data: {
@@ -85,7 +99,11 @@ app.post('/api/checkout', async (req, res) => {
         },
       ],
       customer_email: email,
-      metadata: { classId: cls.id, className: cls.name, customerName: name },
+      metadata: { classId: cls.id, className: cls.name, customerName: name, coupon: trimmedCoupon || '' },
+      // A coupon we already validated above is applied directly; otherwise
+      // Stripe still shows its own "Add promotion code" field on checkout
+      // as a fallback, so either path works.
+      ...(discounts ? { discounts } : { allow_promotion_codes: true }),
       success_url: `${process.env.PUBLIC_URL}/?booked=1`,
       cancel_url: `${process.env.PUBLIC_URL}/?canceled=1`,
     });
