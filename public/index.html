@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clay & Kiln – Pottery Classes</title>
+<style>
+:root{--bg:#faf5ee;--card:#fff;--ink:#2b211b;--mut:#7a6a5e;--acc:#b5532f;--acc2:#8f3f22;--line:#e6dccf;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1e1814;--card:#2a221c;--ink:#f3e9df;--mut:#b3a294;--acc:#d9714a;--acc2:#e8875f;--line:#3d332b}}
+:root[data-theme="dark"]{--bg:#1e1814;--card:#2a221c;--ink:#f3e9df;--mut:#b3a294;--acc:#d9714a;--acc2:#e8875f;--line:#3d332b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5}
+h1,h2,h3{font-weight:600;line-height:1.2;margin:0}
+.sans,button,input,select{font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+.logo{font-size:1.3rem;font-weight:700}.logo span{color:var(--acc)}
+button{cursor:pointer;border:0;border-radius:10px;padding:10px 16px;font-size:.95rem}
+.btn{background:var(--acc);color:#fff;width:100%}.btn:hover{background:var(--acc2)}
+.btn:disabled{opacity:.6;cursor:default}
+.hero{text-align:center;padding:64px 20px 48px;max-width:720px;margin:auto}
+.hero h1{font-size:clamp(2rem,6vw,3.2rem)}
+.hero p{color:var(--mut);font-size:1.1rem;margin:16px 0 24px}
+section{max-width:960px;margin:auto;padding:32px 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:8px}
+.card .emoji{font-size:2rem}
+.meta{color:var(--mut);font-size:.9rem;font-family:system-ui,sans-serif}
+.price{font-size:1.4rem;color:var(--acc);font-weight:700}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal.open{display:flex}
+.box{background:var(--card);border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90%;overflow:auto;position:relative}
+.box h2{margin-bottom:14px}
+.x{position:absolute;top:10px;right:10px;background:none;font-size:1.3rem;color:var(--mut)}
+label{display:block;font-family:system-ui,sans-serif;font-size:.85rem;color:var(--mut);margin:10px 0 4px}
+input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:1rem}
+.msg{font-family:system-ui,sans-serif;font-size:.85rem;color:var(--acc);margin-top:8px;min-height:1em}
+.note{font-family:system-ui,sans-serif;font-size:.78rem;color:var(--mut);margin-top:14px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.banner{max-width:960px;margin:16px auto 0;padding:0 20px}
+.banner div{background:#e7f6ec;color:#1e5631;padding:12px 16px;border-radius:10px;font-family:system-ui,sans-serif;font-size:.9rem}
+footer{text-align:center;color:var(--mut);padding:32px 20px;font-family:system-ui,sans-serif;font-size:.85rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Clay <span>&</span> Kiln</div>
+</header>
+
+<div id="bannerWrap"></div>
+
+<div class="hero">
+  <h1>Learn to make something beautiful with your hands</h1>
+  <p>Small-group pottery classes for every level. All tools, clay and firing included.</p>
+</div>
+
+<section id="classes">
+  <h2>Upcoming classes</h2>
+  <div class="grid" id="grid">Loading classes…</div>
+</section>
+
+<footer>© Clay & Kiln · hello@clayandkiln.example</footer>
+
+<div class="modal" id="payM"><div class="box">
+  <button class="x" onclick="closeM()">✕</button>
+  <div id="payBody"></div>
+</div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const EMOJI={'wheel-throwing-basics':'🏺','hand-building-workshop':'🍵','glazing-finishing':'🎨','date-night-wheel':'👫'};
+let CLASSES=[], sel=null;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+async function loadClasses(){
+  const res=await fetch('/api/classes');
+  CLASSES=await res.json();
+  $('grid').innerHTML=CLASSES.map(c=>`<div class="card"><div class="emoji">${EMOJI[c.id]||'🏺'}</div><h3>${esc(c.name)}</h3><div class="meta">${esc(c.desc)}</div><div class="price">$${(c.price/100).toFixed(0)}</div><button class="btn" onclick="book('${c.id}')">Book now</button></div>`).join('');
+}
+
+function openM(){$('payM').classList.add('open')}
+function closeM(){$('payM').classList.remove('open')}
+
+function book(id){
+  sel=CLASSES.find(c=>c.id===id);
+  $('payBody').innerHTML=`<h2>${esc(sel.name)}</h2>
+  <p class="meta" style="margin-top:-6px">$${(sel.price/100).toFixed(0)} · ${esc(sel.desc)}</p>
+  <label>Full name</label><input id="bName" autocomplete="name">
+  <label>Email</label><input id="bEmail" type="email" autocomplete="email">
+  <div class="msg" id="bmsg"></div>
+  <button class="btn" id="bSubmit" onclick="startCheckout()">Continue to payment</button>
+  <p class="note">You'll pay securely on Stripe's checkout page (card, Apple Pay or Google Pay). Your booking is saved the instant payment succeeds.</p>`;
+  openM();
+}
+
+async function startCheckout(){
+  const name=$('bName').value.trim(), email=$('bEmail').value.trim();
+  if(!name) return $('bmsg').textContent='Please enter your name.';
+  if(!/^\S+@\S+\.\S+$/.test(email)) return $('bmsg').textContent='Enter a valid email.';
+  $('bmsg').textContent='';
+  const btn=$('bSubmit'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Starting checkout…';
+  try{
+    const res=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({classId:sel.id,name,email})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Something went wrong.');
+    window.location.href=data.url; // hand off to Stripe's real, hosted payment page
+  }catch(err){
+    btn.disabled=false; btn.textContent='Continue to payment';
+    $('bmsg').textContent=err.message;
+  }
+}
+
+function showBanner(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('booked')) $('bannerWrap').innerHTML=`<div class="banner"><div>🎉 You're booked! Check your email for confirmation. See you in class.</div></div>`;
+  if(p.get('canceled')) $('bannerWrap').innerHTML=`<div class="banner"><div>Checkout was canceled — no payment was taken. You can book again any time.</div></div>`;
+}
+
+loadClasses();
+showBanner();
+</script>
+</body>
+</html>
