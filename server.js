@@ -36,20 +36,15 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
     try {
       await appendBookingRow([
         new Date().toISOString(),
-        session.metadata.customerName || '',
-        session.customer_details?.email || '',
-        session.metadata.className || '',
-        (session.amount_total / 100).toFixed(2),
-        session.payment_method_types?.[0] || '',
+        session.metadata?.customerName || '',
+        session.customer_email || session.customer_details?.email || '',
+        session.metadata?.className || '',
+        ((session.amount_total || 0) / 100).toFixed(2),
+        'Stripe',
         'Paid',
       ]);
-      console.log('Booking recorded in Sheet:', session.metadata.className, session.customer_details?.email);
     } catch (err) {
-      // Payment succeeded even if the Sheet write failed — never lose that.
-      console.error('PAYMENT SUCCEEDED BUT SHEET WRITE FAILED. Follow up manually.', {
-        session_id: session.id,
-        error: err.message,
-      });
+      console.error('Failed to append booking row to Google Sheet:', err.message);
     }
   }
 
@@ -59,10 +54,10 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/classes', (req, res) => res.json(CLASSES));
+app.get('/api/classes', (req, res) => {
+  res.json(CLASSES);
+});
 
-// ---- Start a real Stripe Checkout session (hosted by Stripe — card
-// number entry never touches our own server, which is how it should be) ----
 app.post('/api/checkout', async (req, res) => {
   try {
     const { classId, name, email, coupon } = req.body || {};
@@ -71,10 +66,6 @@ app.post('/api/checkout', async (req, res) => {
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Please enter your name.' });
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Please enter a valid email.' });
 
-    // ---- Optional coupon typed on our own site. We look it up against
-    // Stripe's real promotion codes and apply it directly if it's valid,
-    // so the discount is already in place before the customer even reaches
-    // Stripe's checkout page. ----
     let discounts;
     const trimmedCoupon = coupon && String(coupon).trim();
     if (trimmedCoupon) {
@@ -87,7 +78,6 @@ app.post('/api/checkout', async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      automatic_payment_methods: { enabled: true }, // shows whatever you've turned on in Stripe (card, Apple Pay, Google Pay, bank debit, etc.) with no code changes needed
       line_items: [
         {
           price_data: {
@@ -100,9 +90,6 @@ app.post('/api/checkout', async (req, res) => {
       ],
       customer_email: email,
       metadata: { classId: cls.id, className: cls.name, customerName: name, coupon: trimmedCoupon || '' },
-      // A coupon we already validated above is applied directly; otherwise
-      // Stripe still shows its own "Add promotion code" field on checkout
-      // as a fallback, so either path works.
       ...(discounts ? { discounts } : { allow_promotion_codes: true }),
       success_url: `${process.env.PUBLIC_URL}/?booked=1`,
       cancel_url: `${process.env.PUBLIC_URL}/?canceled=1`,
@@ -115,7 +102,11 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Clay & Kiln booking server running on port ${PORT}`));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-module.exports = app;
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`Clay & Kiln booking server running on port ${PORT}`);
+});
